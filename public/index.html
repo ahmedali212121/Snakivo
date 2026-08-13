@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+  <meta name="theme-color" content="#08131b"/>
+  <title>Snakivo — Free Multiplayer Snake Game Online</title>
+  <meta name="description" content="Play Snakivo, a free realtime multiplayer snake game. Eat food, grow, boost, hunt smaller snakes, unlock country skins, earn coins, and climb the leaderboard."/>
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1"/>
+  <link rel="canonical" href="__SITE_URL__/"/>
+  <link rel="alternate" hreflang="en" href="__SITE_URL__/"/>
+  <link rel="alternate" hreflang="ar" href="__SITE_URL__/"/>
+  <link rel="alternate" hreflang="x-default" href="__SITE_URL__/"/>
+
+  <meta property="og:type" content="website"/>
+  <meta property="og:site_name" content="Snakivo"/>
+  <meta property="og:title" content="Snakivo — Free Multiplayer Snake Game Online"/>
+  <meta property="og:description" content="Eat, grow, boost, hunt, unlock skins, and become the king of the Snakivo arena."/>
+  <meta property="og:url" content="__SITE_URL__/"/>
+  <meta name="twitter:card" content="summary"/>
+  <meta name="twitter:title" content="Snakivo — Free Multiplayer Snake Game Online"/>
+  <meta name="twitter:description" content="A free realtime multiplayer snake arena for desktop and mobile."/>
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22><text y=%22.9em%22 font-size=%2290%22>🐍</text></svg>"/>
+  <link rel="stylesheet" href="/styles.css"/>
+  <!-- ADSENSE_HEAD -->
+
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org",
+    "@type":"VideoGame",
+    "name":"Snakivo",
+    "url":"__SITE_URL__/",
+    "description":"A free realtime multiplayer snake arena where players eat, grow, boost, unlock skins and compete on a leaderboard.",
+    "applicationCategory":"Game",
+    "gamePlatform":["Web Browser","Desktop","Mobile"],
+    "operatingSystem":"Any",
+    "inLanguage":["en","ar"],
+    "isAccessibleForFree":true,
+    "genre":["Arcade","Multiplayer","Snake"]
+  }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas><div id="vignette"></div>
+
+  <header class="topbar glass">
+    <div class="brand"><span class="brandMark">S</span><span>Snakivo</span></div>
+    <div class="topActions">
+      <div class="coinPill">🪙 <b id="coinTop">0</b></div>
+      <button id="soundBtn" class="iconBtn" aria-label="Sound">🔊</button>
+      <button id="langBtn" class="langBtn">العربية</button>
+    </div>
+  </header>
+
+  <div id="eventBanner"></div>
+
+  <section id="hud" class="hidden">
+    <div class="statsWrap">
+      <div class="stat glass"><span data-i18n="score">Score</span><strong id="score">0</strong></div>
+      <div class="stat glass"><span data-i18n="size">Size</span><strong id="size">10</strong></div>
+      <div class="stat glass"><span data-i18n="kills">Kills</span><strong id="kills">0</strong></div>
+      <div class="stat glass"><span data-i18n="streak">Streak</span><strong id="streak">0</strong></div>
+    </div>
+
+    <div id="leaderboard" class="leaderboard glass"></div>
+
+    <div class="minimapBox glass">
+      <div class="miniTitle" data-i18n="minimap">Mini Map</div>
+      <canvas id="minimap" width="180" height="180"></canvas>
+      <div class="miniLegend"><span>● <b data-i18n="you">You</b></span><span>★ <b data-i18n="rare">Rare</b></span></div>
+    </div>
+
+    <div class="boostTip glass"><span data-i18n="boostTip">Hold SPACE or press BOOST</span></div>
+    <button id="boostBtn" class="boostBtn" data-i18n="boost">BOOST</button>
+    <button id="gameMenuBtn" class="gameMenuBtn" aria-label="Game menu">☰ <span data-i18n="menu">Menu</span></button>
+
+    <div id="joystick" class="joystick">
+      <div class="joyRing"><div id="joyKnob" class="joyKnob"></div></div>
+    </div>
+  </section>
+
+  <section id="pauseMenu" class="overlay hidden">
+    <div class="panel glass pausePanel">
+      <div class="pauseIcon">☰</div>
+      <h2 data-i18n="gameMenu">Game Menu</h2>
+      <button id="resumeBtn" class="primary" data-i18n="resume">RESUME</button>
+      <button id="homeBtn" class="menuSecondary">⌂ <span data-i18n="home">HOME</span></button>
+      <div class="pauseActions">
+        <button id="pauseSoundBtn" class="menuSmall">🔊 <span data-i18n="sound">Sound</span></button>
+        <button id="pauseLangBtn" class="menuSmall">🌐 <span data-i18n="language">Language</span></button>
+      </div>
+      <small class="pauseHint" data-i18n="escHint">Press ESC to open or close this menu.</small>
+    </div>
+  </section>
+
+  <main id="menu" class="overlay show">
+    <div class="panel glass heroPanel">
+      <div class="snakeLogo">🐍</div>
+      <h1>Snakivo</h1>
+      <p class="tagline" data-i18n="tagline">Eat. Grow. Hunt. Become the king.</p>
+
+      <div class="menuEconomy">
+        <div class="wallet">🪙 <span data-i18n="coins">Coins</span>: <b id="coinMenu">0</b></div>
+        <button id="dailyBtn" class="dailyBtn"><span>🎁</span><b data-i18n="dailyReward">Daily Reward</b><small id="dailyStatus"></small></button>
+      </div>
+
+      <div class="homeOptions">
+        <label class="botToggle">
+          <span class="botCopy"><b>🤖 <span data-i18n="bots">Bots</span></b><small data-i18n="botsHint">Off by default</small></span>
+          <input id="botsToggle" type="checkbox"/>
+          <span class="toggleTrack"><span></span></span>
+        </label>
+        <button id="watchCoinsBtn" class="watchCoinsBtn">▶ <span data-i18n="watchCoins">Watch Ad</span> <b id="watchCoinsReward">+25 🪙</b></button>
+      </div>
+
+      <input id="nameInput" maxlength="18" autocomplete="nickname" data-i18n-placeholder="nickname" placeholder="Your nickname"/>
+
+      <div class="skinTitle" data-i18n="chooseSkin">Choose your skin</div>
+      <div id="skins" class="skins"></div>
+      <div id="skinHint" class="skinHint"></div>
+
+      <button id="playBtn" class="primary" data-i18n="play">PLAY NOW</button>
+
+      <div class="features">
+        <span>⚡ <b data-i18n="realtime">Realtime</b></span>
+        <span>🤖 <b>Bots</b></span>
+        <span>⭐ <b>Rare Events</b></span>
+        <span>🔥 <b>Kill Streaks</b></span>
+        <span>🪙 <b data-i18n="coins">Coins</b></span>
+      </div>
+      <p class="controls" data-i18n="controls">Move your mouse or finger to steer. Hunt smaller snakes, chase rare food, and boost with SPACE.</p>
+      <nav class="homeSeoLinks" aria-label="Snakivo information">
+        <a href="/guide.html">How to Play</a><a href="/faq.html">FAQ</a><a href="/about.html">About</a>
+      </nav>
+    </div>
+  </main>
+
+  <section id="death" class="overlay hidden">
+    <div class="panel glass deathPanel">
+      <div class="skull">💥</div><h2 data-i18n="eliminated">Eliminated!</h2><p id="deathText"></p>
+      <div class="deathStats">
+        <span><small data-i18n="score">Score</small><b id="finalScore">0</b></span>
+        <span><small data-i18n="size">Size</small><b id="finalSize">0</b></span>
+      </div>
+      <div class="coinEarned">🪙 <span data-i18n="earned">Earned</span>: <b id="earnedCoins">0</b></div>
+      <button id="respawnBtn" class="primary" data-i18n="respawn">RESPAWN</button>
+      <div class="respawnChoice">
+        <button id="rewardBtn" class="reward">▶ <span data-i18n="reward">WATCH AD & RESPAWN BIGGER</span></button>
+        <button id="payCoinsBtn" class="payCoinsBtn">🪙 <span id="payCoinsText">PAY 75 COINS & RESPAWN BIGGER</span></button>
+      </div>
+      <small class="adNote" data-i18n="adDemo">Rewarded-ad hook ready for an approved ad provider.</small>
+    </div>
+  </section>
+
+  <div id="toast"></div>
+  <script src="/socket.io/socket.io.js"></script><script src="/game.js"></script>
+  <footer class="site-footer"><a href="/about.html">About</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="/contact.html">Contact</a></footer>
+</body>
+</html>
