@@ -135,7 +135,10 @@ function addBot(){
   if(botCount()>=MAX_BOTS) return;
   const id=`bot_${botId++}`;
   const names=['Nova','Viper','Cobra','Pixel','Dash','Mamba','Luna','Rex','Echo','Bolt','Nix','Zara'];
-  const p=makePlayer(id,{name:names[Math.floor(Math.random()*names.length)]},true);
+  // Snakivo v1.9.11 PLAYER COLOR FIX
+  const skinIds=Object.keys(SKINS);
+  const botSkin=skinIds[Math.floor(Math.random()*skinIds.length)]||'emerald';
+  const p=makePlayer(id,{name:names[Math.floor(Math.random()*names.length)],skin:botSkin},true);
   p.mass=rnd(11,24);
   p.score=p.mass*2;
   players.set(id,p);
@@ -151,9 +154,28 @@ function maintainBots(){
   }
 }
 
+// Snakivo v1.9.13 ROBUST UNIQUE PLAYER COLORS
+const HUMAN_COLOR_VARIANTS=[
+ ['#36dc81','#b8ffd2'],['#37b9ff','#d7f3ff'],['#9b6cff','#eadcff'],
+ ['#ff5d8f','#ffd6e4'],['#ff9b42','#ffe1bd'],['#ffd43b','#fff0a8'],
+ ['#39e1d1','#c8fffa'],['#e35dff','#f7d8ff'],['#ff6464','#ffd2d2'],
+ ['#78e05a','#dcffd2'],['#5f7cff','#dce3ff'],['#f06bb5','#ffd8ef']
+];
+function assignUniqueHumanColor(p){
+  const used=new Set([...players.values()].filter(x=>!x.isBot&&x.id!==p.id).map(x=>(x.color||'').toLowerCase()));
+  let seed=0;for(const ch of String(p.id||''))seed=(seed*33+ch.charCodeAt(0))>>>0;
+  for(let i=0;i<HUMAN_COLOR_VARIANTS.length;i++){
+    const pair=HUMAN_COLOR_VARIANTS[(seed+i)%HUMAN_COLOR_VARIANTS.length];
+    if(!used.has(pair[0].toLowerCase())){p.color=pair[0];p.accent=pair[1];return}
+  }
+  const pair=HUMAN_COLOR_VARIANTS[seed%HUMAN_COLOR_VARIANTS.length];
+  p.color=pair[0];p.accent=pair[1];
+}
+
 io.on('connection', socket=>{
   socket.on('join',data=>{
     const p=makePlayer(socket.id,{name:data?.name,skin:data?.skin,botsEnabled:!!data?.botsEnabled},false);
+    assignUniqueHumanColor(p);
     players.set(socket.id,p);
     socket.emit('joined',{id:socket.id,world:WORLD,skins:SKINS});
   });
@@ -178,10 +200,18 @@ p.vx=Math.cos(p.angle)*BOOST_SPEED;
     p.boostRequested=!!data.boost;
     p.lastInput=Date.now();
   });
+  // SNAKIVO_V1_9_2_UNIFIED: normal / rewarded revive / rewarded start-big
   socket.on('respawn',data=>{
     const old=players.get(socket.id);
     const p=makePlayer(socket.id,{name:data?.name||old?.name,skin:data?.skin||old?.skin,botsEnabled:!!data?.botsEnabled},false);
-    if(data?.rewarded===true){
+    assignUniqueHumanColor(p);
+    const mode=data?.mode||((data?.rewarded===true)?'startBig':'normal');
+    if(mode==='revive'&&data?.rewarded===true&&old&&!old.alive){
+      // Fair revive: keep 75% of death mass and 60% of score, with caps + brief protection.
+      p.mass=Math.max(14,Math.min(160,old.mass*.75));
+      p.score=Math.max(5,Math.floor(old.score*.60));
+      p.invulnerableUntil=Date.now()+3200;
+    }else if(mode==='startBig'&&data?.rewarded===true){
       p.mass=22;p.score=12;p.invulnerableUntil=Date.now()+2600;
     }
     players.set(socket.id,p);
