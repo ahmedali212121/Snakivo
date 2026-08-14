@@ -119,3 +119,46 @@ html[dir="rtl"] .skinSectionTitle,html[dir="rtl"] .saudiSpecialLabel{text-align:
     bottom:max(24px, calc(env(safe-area-inset-bottom) + 18px));
   }
 }
+
+
+/* Snakivo v1.6.2 control side */
+.controlSideSetting{display:none}
+@media(max-width:760px){
+ .controlSideSetting{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;min-height:46px;padding:7px 9px 7px 12px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.055)}
+ .controlSideLabel{font-size:12px;font-weight:800;color:#c7d6df}
+ .controlSideButtons{display:flex;gap:6px}
+ .controlSideBtn{min-width:66px;height:32px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:#b9cad5;font-size:11px;font-weight:900}
+ .controlSideBtn.active{color:#062315;border-color:rgba(112,247,169,.65);background:linear-gradient(135deg,#70f7a9,#35d882)}
+ html[data-control-side="right"] .joystick{left:auto!important;right:max(18px,env(safe-area-inset-right))!important}
+ html[data-control-side="right"] .boostBtn{right:auto!important;left:max(18px,env(safe-area-inset-left))!important}
+ html[data-control-side="left"] .joystick{right:auto!important;left:max(18px,env(safe-area-inset-left))!important}
+ html[data-control-side="left"] .boostBtn{left:auto!important;right:max(18px,env(safe-area-inset-right))!important}
+}
+
+
+/* Snakivo v1.6.4 boost charge UI */
+.boostBtn:disabled{opacity:.42;filter:saturate(.45);cursor:not-allowed}
+.boostBtn.boostReady{box-shadow:0 0 0 4px rgba(103,232,249,.14),0 10px 28px rgba(54,220,129,.24)}
+.boostBtn.boostActive{animation:snakivoBoostPulse .45s ease-in-out infinite alternate}
+@keyframes snakivoBoostPulse{from{transform:scale(1)}to{transform:scale(1.06)}}
+
+/* Snakivo v1.6.5 boost food */
+.boostBtn:disabled{opacity:.42;filter:saturate(.45);cursor:not-allowed}
+.boostBtn.boostReady{box-shadow:0 0 0 4px rgba(103,232,249,.14),0 10px 28px rgba(54,220,129,.24)}
+.boostBtn.boostActive{animation:snakivoBoostPulse .45s ease-in-out infinite alternate}
+@keyframes snakivoBoostPulse{from{transform:scale(1)}to{transform:scale(1.06)}}
+
+/* Snakivo v1.6.6b Boost Food */
+.boostBtn.boostReady{box-shadow:0 0 0 4px rgba(103,232,249,.18),0 0 24px rgba(103,232,249,.38)}
+
+/* Snakivo v1.6.7 Boost hidden until food is collected */
+.boostBtn.hidden{display:none!important}
+.boostBtn.boostReady{box-shadow:0 0 0 4px rgba(103,232,249,.20),0 0 28px rgba(103,232,249,.42)}
+
+/* Snakivo v1.6.8 boost visibility */
+.boostBtn[data-boost-hidden="1"],
+.boostTip[data-boost-hidden="1"]{display:none!important}
+
+
+/* Snakivo v1.7.9 BOOST desktop visibility fix */
+.boostBtn{display:flex!important;align-items:center;justify-content:center;pointer-events:auto!important;touch-action:manipulation;}

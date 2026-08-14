@@ -10,9 +10,11 @@ const io = new Server(server, { transports: ['websocket', 'polling'] });
 const PORT = process.env.PORT || 3000;
 const WORLD = { width: 4600, height: 4600 };
 const TICK_RATE = 30;
-const FOOD_TARGET = 560;
+const FOOD_TARGET = 480;
 const BASE_SPEED = 250;
-const BOOST_SPEED = 390;
+const BOOST_SPEED = 500;
+const BOOST_DURATION_MS = 2600;
+const MAX_BOOST_CHARGES = 3;
 const BASE_RADIUS = 18;
 const MAX_NAME = 18;
 const BOT_TARGET = 8;
@@ -21,6 +23,7 @@ const RARE_EVENT_INTERVAL = 42000;
 const RARE_EVENT_VALUE = 55;
 
 const players = new Map();
+  let boostFoodId=null,boostFoodNextAt=Date.now()+8000;
 const foods = new Map();
 let foodId = 1;
 let botId = 1;
@@ -69,8 +72,16 @@ function makeFood(){
 function addFood(f,x,y){
   const id=String(foodId++);
   foods.set(id,{id,x:x??rnd(20,WORLD.width-20),y:y??rnd(20,WORLD.height-20),...f});
+  if(f && f.type==='boost') io.emit('gameEvent',{type:'boostSpawn',x:f.x,y:f.y,id:f.id});
   return foods.get(id);
 }
+function spawnBoostFood(){
+    if(boostFoodId && foods.has(boostFoodId)) return;
+    const x=rnd(500,WORLD.width-500), y=rnd(500,WORLD.height-500);
+    const f=addFood({type:'boost',value:1.5,r:16,glow:48,hue:190},x,y);
+    boostFoodId=f.id;
+  }
+
 function spawnFood(count=1){ for(let i=0;i<count;i++) addFood(makeFood()); }
 spawnFood(FOOD_TARGET);
 
@@ -80,7 +91,7 @@ function makePlayer(id,data={},isBot=false){
   return {
     id,name:cleanName(data.name),x:pos.x,y:pos.y,vx:0,vy:0,angle:rnd(-Math.PI,Math.PI),targetAngle:rnd(-Math.PI,Math.PI),
     mass:10,score:0,alive:true,boost:false,skin,color:SKINS[skin].color,accent:SKINS[skin].accent,
-    lastInput:Date.now(),invulnerableUntil:Date.now()+1800,joinedAt:Date.now(),kills:0,streak:0,isBot,
+    lastInput:Date.now(),invulnerableUntil:Date.now()+1800,joinedAt:Date.now(),kills:0,streak:0,isBot,boostRequested:false,boostCharges:0, // v1.8.6: initialize BOOST charges
     botThinkAt:0,botRespawnAt:0
   };
 }
@@ -88,7 +99,7 @@ function publicPlayer(p){
   return {
     id:p.id,name:p.name,x:p.x,y:p.y,angle:p.angle,mass:p.mass,score:Math.floor(p.score),alive:p.alive,
     color:p.color,accent:p.accent,skin:p.skin,boost:p.boost,r:sizeFromMass(p.mass),inv:p.invulnerableUntil>Date.now(),
-    kills:p.kills,streak:p.streak,isBot:p.isBot
+    kills:p.kills,streak:p.streak,isBot:p.isBot,boostCharges:p.boostCharges||0,boostActive:!!p.boost
   };
 }
 function humanCount(){ return [...players.values()].filter(p=>!p.isBot).length; }
@@ -120,11 +131,25 @@ io.on('connection', socket=>{
     players.set(socket.id,p);
     socket.emit('joined',{id:socket.id,world:WORLD,skins:SKINS});
   });
+  socket.on('boost',()=>{
+    const p=players.get(socket.id);
+    if(!p||!p.alive||p.isBot){
+}
+if((p.boostCharges||0)>0&&!p.boost){
+      const boostNow=Date.now();
+      p.boostCharges-=1;
+      p.boostUntil=boostNow+BOOST_DURATION_MS;
+      p.boost=true;
+      p.boostRequested=false;
+p.vx=Math.cos(p.angle)*BOOST_SPEED;
+      p.vy=Math.sin(p.angle)*BOOST_SPEED;
+    }
+  });
   socket.on('input',data=>{
     const p=players.get(socket.id);
     if(!p||!p.alive||p.isBot)return;
     if(Number.isFinite(data.angle))p.targetAngle=data.angle;
-    p.boost=!!data.boost;
+    p.boostRequested=!!data.boost;
     p.lastInput=Date.now();
   });
   socket.on('respawn',data=>{
@@ -143,7 +168,7 @@ function spawnRareEvent(){
   if([...foods.values()].some(f=>f.type==='event')) return;
   const x=rnd(500,WORLD.width-500), y=rnd(500,WORLD.height-500);
   const f=addFood({type:'event',value:RARE_EVENT_VALUE,r:25,glow:44,hue:48},x,y);
-  io.emit('gameEvent',{type:'rareSpawn',x,y,id:f.id,value:RARE_EVENT_VALUE});
+io.emit('gameEvent',{type:'rareSpawn',x,y,id:f.id,value:RARE_EVENT_VALUE});
 }
 
 function kill(victim,killer){
@@ -217,7 +242,11 @@ function botAI(p,now){
 }
 
 function update(dt){
-  const now=Date.now();
+    const now=Date.now();
+    if(now>=boostFoodNextAt && (!boostFoodId || !foods.has(boostFoodId))){
+      spawnBoostFood();
+      boostFoodNextAt=Infinity;
+    }
   maintainBots();
   if(now-lastRareEvent>=RARE_EVENT_INTERVAL){
     lastRareEvent=now;
@@ -231,9 +260,33 @@ function update(dt){
     let da=((p.targetAngle-p.angle+Math.PI*3)%(Math.PI*2))-Math.PI;
     p.angle+=da*Math.min(1,dt*7.8);
     const sizePenalty=clamp(1-(sizeFromMass(p.mass)-BASE_RADIUS)/240,0.60,1);
-    const boosting=p.boost&&p.mass>13;
+    // v1.7.4b: Boost remains active for its full duration and immediately uses BOOST_SPEED.
+
+    if(!p.isBot && !p.boost && p.boostRequested && (p.boostCharges||0)>0 && p.mass>=10){
+
+      p.boostCharges-=1;
+
+      p.boostUntil=now+BOOST_DURATION_MS;
+
+      p.boost=true;
+
+    }
+
+    if(!p.isBot && p.boost && now>=p.boostUntil){
+
+      p.boost=false;
+
+      p.boostRequested=false;
+
+    }
+
+    const boosting=p.isBot ? !!p.boost : (p.boost===true && now<p.boostUntil);
+
     const speed=(boosting?BOOST_SPEED:BASE_SPEED)*sizePenalty;
-    p.vx=Math.cos(p.angle)*speed;p.vy=Math.sin(p.angle)*speed;
+
+    p.vx=Math.cos(p.angle)*speed;
+
+    p.vy=Math.sin(p.angle)*speed;
     p.x+=p.vx*dt;p.y+=p.vy*dt;
     const rr=sizeFromMass(p.mass);
     p.x=clamp(p.x,rr,WORLD.width-rr);p.y=clamp(p.y,rr,WORLD.height-rr);
@@ -243,9 +296,17 @@ function update(dt){
     for(const [id,f] of foods){
       const dx=f.x-p.x,dy=f.y-p.y,hit=pr+f.r;
       if(dx*dx+dy*dy<hit*hit){
-        foods.delete(id);
-        p.mass+=f.value;
-        p.score+=2.2*f.value;
+          foods.delete(id);
+          if(f.type==='boost'){
+            boostFoodId=null;
+            boostFoodNextAt=Date.now()+18000;
+            if(!p.isBot){
+              io.emit('gameEvent',{type:'boostEaten',id:p.id,name:p.name});
+              p.boostCharges=Math.min(MAX_BOOST_CHARGES,(p.boostCharges||0)+1);
+            }
+          }
+          p.mass+=f.value;
+          p.score+=2.2*f.value;
         if(f.type==='event'){
           p.score+=80;
           io.emit('gameEvent',{type:'rareEaten',id:p.id,name:p.name,value:f.value});
@@ -333,3 +394,4 @@ app.get('/health',(_req,res)=>res.json({ok:true,players:players.size,humans:huma
 app.get('*',(_req,res)=>res.status(404).sendFile(path.join(__dirname,'public','404.html')));
 
 server.listen(PORT,()=>console.log(`Snakivo running on http://localhost:${PORT}`));
+

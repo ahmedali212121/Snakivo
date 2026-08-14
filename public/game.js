@@ -21,6 +21,24 @@ resumeBtn:document.getElementById('resumeBtn'),homeBtn:document.getElementById('
 pauseSoundBtn:document.getElementById('pauseSoundBtn'),pauseLangBtn:document.getElementById('pauseLangBtn')
 };
 
+// Snakivo v1.6.2 mobile control side
+const CONTROL_SIDE_KEY='snakivo-control-side';
+function applyControlSide(side){
+ side=side==='left'?'left':'right';
+ document.documentElement.dataset.controlSide=side;
+ try{localStorage.setItem(CONTROL_SIDE_KEY,side)}catch{}
+ document.querySelectorAll('[data-control-side]').forEach(btn=>{
+   const active=btn.dataset.controlSide===side;
+   btn.classList.toggle('active',active);
+   btn.setAttribute('aria-pressed',active?'true':'false');
+ });
+}
+document.querySelectorAll('[data-control-side]').forEach(btn=>btn.addEventListener('click',()=>applyControlSide(btn.dataset.controlSide)));
+let savedControlSide='right';
+try{savedControlSide=localStorage.getItem(CONTROL_SIDE_KEY)||'right'}catch{}
+applyControlSide(savedControlSide);
+
+
 const I18N={
 en:{
 tagline:'Eat. Grow. Hunt. Become the king.',nickname:'Your nickname',play:'PLAY NOW',realtime:'Realtime',
@@ -28,7 +46,7 @@ controls:'Move your mouse or finger to steer. Hunt smaller snakes, chase rare fo
 score:'Score',size:'Size',kills:'Kills',streak:'Streak',boostTip:'Hold SPACE or press BOOST',boost:'BOOST',
 eliminated:'Eliminated!',respawn:'RESPAWN',reward:'WATCH AD & RESPAWN BIGGER',adDemo:'Rewarded-ad hook ready for an approved ad provider.',
 leaderboard:'Leaderboard',killedBy:'Eliminated by',adPlaceholder:'Demo reward granted. Connect an approved rewarded-ad SDK before production.',
-chooseSkin:'Choose your skin',rareSpawn:'GOLDEN FOOD SPAWNED!',rareEaten:'claimed the Golden Food!',killStreak:'KILL STREAK',
+chooseSkin:'Choose your skin',rareSpawn:'GOLDEN FOOD SPAWNED!',rareEaten:'claimed the Golden Food!',boostSpawn:'BOOST FOOD SPAWNED!',boostEaten:'BOOST CHARGE +1!',killStreak:'KILL STREAK',
 bot:'BOT',minimap:'Mini Map',you:'You',rare:'Rare',coins:'Coins',dailyReward:'Daily Reward',claim:'CLAIM +100',
 claimed:'Claimed today',earned:'Earned',locked:'Locked',unlock:'Unlock',cost:'cost',rank:'Rank',yourRank:'Your rank',
 streakBonus:'streak bonus',skinUnlocked:'Skin unlocked!',needCoins:'Not enough coins',dailyClaimed:'Daily reward claimed!',payRespawn:'PAY {cost} COINS & RESPAWN BIGGER',payRespawnShort:'Pay Coins',notEnoughRespawn:'Not enough coins to use paid respawn',bots:'Bots',botsHint:'Off by default',watchCoins:'Watch Ad',adCoinsGranted:'Ad reward granted',unlockAd:'Watch Ad to unlock',or:'or',classicSkins:'Classic Skins',countrySkins:'Country Skins',saudiSpecial:'Saudi Special • Swords & Palm',menu:'Menu',gameMenu:'Game Menu',resume:'RESUME',home:'HOME',sound:'Sound',language:'Language',escHint:'Press ESC to open or close this menu.'
@@ -39,7 +57,7 @@ controls:'حرّك الماوس أو استخدم عصا التحكم. طارد 
 score:'النقاط',size:'الحجم',kills:'الإقصاءات',streak:'السلسلة',boostTip:'اضغط SPACE أو زر السرعة',boost:'سرعة',
 eliminated:'تم إقصاؤك!',respawn:'العودة للعب',reward:'شاهد إعلانًا وارجع أكبر',adDemo:'ميزة إعلان المكافأة جاهزة للربط بمزود معتمد.',
 leaderboard:'المتصدرون',killedBy:'أقصاك',adPlaceholder:'تم منح مكافأة تجريبية. اربط SDK معتمد قبل النشر.',
-chooseSkin:'اختر شكل الحيّة',rareSpawn:'ظهر الطعام الذهبي النادر!',rareEaten:'حصل على الطعام الذهبي!',killStreak:'سلسلة إقصاءات',
+chooseSkin:'اختر شكل الحيّة',rareSpawn:'ظهر الطعام الذهبي النادر!',rareEaten:'حصل على الطعام الذهبي!',boostSpawn:'ظهر طعام السرعة!',boostEaten:'تمت إضافة شحنة سرعة +1!',killStreak:'سلسلة إقصاءات',
 bot:'بوت',minimap:'الخريطة',you:'أنت',rare:'النادر',coins:'العملات',dailyReward:'المكافأة اليومية',claim:'استلم +100',
 claimed:'تم الاستلام اليوم',earned:'كسبت',locked:'مقفل',unlock:'فتح',cost:'السعر',rank:'المركز',yourRank:'مركزك',
 streakBonus:'مكافأة السلسلة',skinUnlocked:'تم فتح الشكل!',needCoins:'العملات غير كافية',dailyClaimed:'تم استلام المكافأة اليومية!',payRespawn:'ادفع {cost} عملة وارجع أكبر',payRespawnShort:'ادفع عملات',notEnoughRespawn:'العملات غير كافية للعودة المدفوعة',bots:'البوتات',botsHint:'مقفلة افتراضيًا',watchCoins:'شاهد إعلانًا',adCoinsGranted:'تمت إضافة مكافأة الإعلان',unlockAd:'شاهد إعلانًا للفتح',or:'أو',classicSkins:'السكنات الأساسية',countrySkins:'سكنات الدول',saudiSpecial:'السعودية المميز • السيفان والنخلة',menu:'القائمة',gameMenu:'قائمة اللعبة',resume:'متابعة',home:'الرئيسية',sound:'الصوت',language:'اللغة',escHint:'اضغط ESC لفتح أو إغلاق القائمة.'
@@ -77,12 +95,13 @@ if(!Array.isArray(unlocked)||!unlocked.includes('emerald'))unlocked=['emerald'];
 let coins=Math.max(0,parseInt(localStorage.getItem('snakivo_coins')||'0',10)||0);
 
 let myId=null,world={width:4600,height:4600},state={players:[],foods:[],leaderboard:[]},playing=false,dead=false;
-let pointer={x:innerWidth/2,y:innerHeight/2},boost=false,cam={x:2300,y:2300,zoom:1},sound=localStorage.getItem('snakivo_sound')!=='off';
+let pointer={x:innerWidth/2,y:innerHeight/2},boost=false,boostCharges=0,cam={x:2300,y:2300,zoom:1},sound=localStorage.getItem('snakivo_sound')!=='off';
 let prevScore=0,lastEatSoundAt=0,rank=0;
 const PAID_RESPAWN_COST=75;
 let botsEnabled=false;
 let rewardedAdsWatched=Math.max(0,parseInt(localStorage.getItem('snakivo_rewarded_ads')||'0',10)||0);
 const trails=new Map();
+const renderPos=new Map();
 
 function nextAdCoinReward(){
   return Math.min(100,25+rewardedAdsWatched*10);
@@ -105,6 +124,19 @@ function completeRewardedAd(action='coins',skinId=null){
   updateWatchCoinsUI();
 }
 
+function updateBoostUI(){
+   const boostTip=document.querySelector('.boostTip');
+  const me=state.players.find(p=>p.id===myId&&p.alive);
+  boostCharges=me?.boostCharges||0;
+  const active=!!me?.boostActive;
+  if(!ui.boost)return;
+  ui.boost.textContent=active?'BOOSTING!':(boostCharges>0?'BOOST READY ('+boostCharges+')':'FIND BOOST FOOD');
+  ui.boost.classList.toggle('boostReady',boostCharges>0&&!active);
+  ui.boost.style.display=(boostCharges>0||active)?'flex':'none';
+   if(boostTip)boostTip.style.display=(boostCharges>0||active)?'block':'none';
+ui.boost.classList.toggle('boostActive',active);
+  ui.boost.disabled=boostCharges<=0&&!active;
+}
 function updatePaidRespawnUI(){
  if(!ui.payCoinsBtn)return;
  ui.payCoinsText.textContent=I18N[lang].payRespawn.replace('{cost}',PAID_RESPAWN_COST);
@@ -284,7 +316,9 @@ socket.on('dead',d=>{
  coins+=earned;saveEconomy();ui.earnedCoins.textContent=earned;sfx('death')
 });
 socket.on('gameEvent',e=>{
- if(e.type==='rareSpawn'){banner(`⭐ ${I18N[lang].rareSpawn}`);sfx('rare')}
+   if(e.type==='boostSpawn'){banner(`⚡ ${I18N[lang].boostSpawn||'BOOST FOOD SPAWNED!'}`);sfx('rare')}
+  if(e.type==='boostEaten' && e.id===myId){toast(`🚀 ${I18N[lang].boostEaten||'BOOST CHARGE +1!'}`,2200);sfx('rare')}
+if(e.type==='rareSpawn'){banner(`⭐ ${I18N[lang].rareSpawn}`);sfx('rare')}
  if(e.type==='rareEaten'){banner(`👑 ${e.name} ${I18N[lang].rareEaten}`);sfx('rare')}
  if(e.type==='streak'){
    const msg=`🔥 ${e.name}: ${e.streak} ${I18N[lang].killStreak} +${e.bonus||0}`;
@@ -292,14 +326,18 @@ socket.on('gameEvent',e=>{
  }
 });
 socket.on('state',s=>{
- state=s;const liveIds=new Set();
+   state=s;
+   // v1.8.7b: sync BOOST charges from every server state
+   updateBoostUI();const liveIds=new Set();
+ for(const p of s.players){if(!renderPos.has(p.id))renderPos.set(p.id,{x:p.x,y:p.y});}
  for(const p of s.players){
    liveIds.add(p.id);if(!p.alive)continue;
    let tr=trails.get(p.id);if(!tr){tr=[];trails.set(p.id,tr)}
    const last=tr[tr.length-1];if(!last||Math.hypot(last.x-p.x,last.y-p.y)>4)tr.push({x:p.x,y:p.y});
-   const keep=Math.min(620,Math.max(46,Math.floor(50+p.mass*3.1)));if(tr.length>keep)tr.splice(0,tr.length-keep);
+   const keep=Math.min(320,Math.max(40,Math.floor(44+p.mass*2.2)));if(tr.length>keep)tr.splice(0,tr.length-keep);
  }
  for(const id of trails.keys())if(!liveIds.has(id))trails.delete(id);
+ for(const id of renderPos.keys())if(!liveIds.has(id))renderPos.delete(id);
  const me=s.players.find(p=>p.id===myId);
  if(me){
    ui.score.textContent=me.score;ui.size.textContent=Math.floor(me.mass);ui.kills.textContent=me.kills||0;ui.streak.textContent=me.streak||0;
@@ -326,6 +364,18 @@ function drawMini(){
  mctx.strokeStyle='rgba(255,255,255,.16)';mctx.lineWidth=2;mctx.strokeRect(1,1,w-2,h-2);
  const sxm=w/world.width,sym=h/world.height;
  const event=state.foods.find(f=>f.type==='event');
+   const boostMini=state.foods.find(f=>f.type==='boost');
+   if(boostMini){
+     const bx=boostMini.x*sxm,by=boostMini.y*sym;
+     mctx.save();
+     mctx.fillStyle='#67e8f9';
+     mctx.shadowColor='#67e8f9';
+     mctx.shadowBlur=12;
+     mctx.font='900 20px Arial';
+     mctx.textAlign='center';mctx.textBaseline='middle';
+     mctx.fillText('⚡',bx,by);
+     mctx.restore();
+   }
  if(event){
    const x=event.x*sxm,y=event.y*sym;mctx.fillStyle='#ffe156';mctx.shadowColor='#ffe156';mctx.shadowBlur=12;
    mctx.beginPath();for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,r=i%2?4:8;mctx.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r)}mctx.closePath();mctx.fill();mctx.shadowBlur=0;
@@ -334,20 +384,74 @@ function drawMini(){
  if(me){mctx.fillStyle='#ffffff';mctx.beginPath();mctx.arc(me.x*sxm,me.y*sym,5,0,Math.PI*2);mctx.fill();mctx.strokeStyle=me.color;mctx.lineWidth=2;mctx.stroke()}
 }
 
+// v1.8.4: robust window-level Space BOOST
+window.addEventListener('keydown',e=>{
+  if(e.code==='Space' || e.key===' ' || e.keyCode===32){
+    if(!pauseOpen && !dead && playing && boostCharges>0){
+      e.preventDefault();
+      e.stopPropagation();
+      socket.emit('boost');
+      boost=true;
+    }
+  }
+},true);
+window.addEventListener('keypress',e=>{
+  if((e.code==='Space' || e.key===' ' || e.keyCode===32) && !pauseOpen && !dead && playing && boostCharges>0){
+    e.preventDefault();
+    e.stopPropagation();
+    socket.emit('boost');
+    boost=true;
+  }
+},true);
+window.addEventListener('keyup',e=>{
+  if(e.code==='Space' || e.key===' ' || e.keyCode===32) boost=false;
+},true);
 // Mouse / touch / joystick
 addEventListener('mousemove',e=>{pointer.x=e.clientX;pointer.y=e.clientY});
 addEventListener('touchmove',e=>{if(!e.target.closest?.('#joystick') && e.touches[0]){pointer.x=e.touches[0].clientX;pointer.y=e.touches[0].clientY}},{passive:true});
+  // v1.8.3b: Space triggers the proven BOOST button path
+  document.addEventListener('keydown',e=>{
+    if((e.code==='Space'||e.key===' ') && !pauseOpen && !dead && playing){
+      e.preventDefault();
+      if(boostCharges>0){
+        ui.boost.click();
+      }
+    }
+  },true);
+  document.addEventListener('keyup',e=>{
+    if(e.code==='Space'||e.key===' ') boost=false;
+  },true);
+
 addEventListener('keydown',e=>{
  if(e.code==='Escape'){
    e.preventDefault();
    if(pauseOpen)closePause();else openPause();
    return;
  }
- if(e.code==='Space'&&!pauseOpen){e.preventDefault();boost=true}
 });
-addEventListener('keyup',e=>{if(e.code==='Space')boost=false});
-['pointerdown','touchstart'].forEach(ev=>ui.boost.addEventListener(ev,e=>{e.preventDefault();boost=true},{passive:false}));
+['pointerdown','touchstart'].forEach(ev=>ui.boost.addEventListener(ev,e=>{
+  e.preventDefault();
+  if(boostCharges>0){
+    boost=true;
+    socket.emit('boost');
+  }
+},{passive:false}));
+ui.boost.addEventListener('click',e=>{
+  e.preventDefault();
+  if(boostCharges>0){
+    boost=true;
+    socket.emit('boost');
+  }
+});
+
 ['pointerup','pointercancel','touchend'].forEach(ev=>ui.boost.addEventListener(ev,e=>{e.preventDefault();boost=false},{passive:false}));
+  // v1.7.8: BOOST direct capture
+  document.addEventListener('pointerdown',e=>{
+    const b=e.target && e.target.closest ? e.target.closest('#boostBtn') : null;
+    if(!b || !playing || dead || pauseOpen) return;
+    socket.emit('boost');
+    boost=true;
+  },true);
 
 let joyActive=false,joyId=null,joyCenter={x:0,y:0};
 function joyStart(e){
@@ -369,6 +473,7 @@ ui.joystick.addEventListener('pointerdown',joyStart);addEventListener('pointermo
 
 setInterval(()=>{
  if(!playing||dead||pauseOpen)return;
+ if(!boostCharges)boost=false;
  const angle=Math.atan2(pointer.y-innerHeight/2,pointer.x-innerWidth/2);socket.emit('input',{angle,boost})
 },33);
 
@@ -448,28 +553,49 @@ function frame(){
  const g=ctx.createRadialGradient(innerWidth*.5,innerHeight*.45,50,innerWidth*.5,innerHeight*.5,Math.max(innerWidth,innerHeight));
  g.addColorStop(0,'#102733');g.addColorStop(1,'#061019');ctx.fillStyle=g;ctx.fillRect(0,0,innerWidth,innerHeight);drawGrid();
  const me=state.players.find(p=>p.id===myId);
- if(me){cam.x+=(me.x-cam.x)*.12;cam.y+=(me.y-cam.y)*.12;const target=Math.max(.48,Math.min(1,1-(me.r-20)/250));cam.zoom+=(target-cam.zoom)*.06}
+   if(me){
+     const rp=renderPos.get(me.id)||{x:me.x,y:me.y};
+     rp.x+=(me.x-rp.x)*0.34;rp.y+=(me.y-rp.y)*0.34;renderPos.set(me.id,rp);
+     cam.x+=(rp.x-cam.x)*.16;cam.y+=(rp.y-cam.y)*.16;
+     const target=Math.max(.48,Math.min(1,1-(me.r-20)/250));cam.zoom+=(target-cam.zoom)*.06
+   }
  ctx.save();ctx.strokeStyle='rgba(109,229,167,.18)';ctx.lineWidth=4;ctx.strokeRect(sx(0),sy(0),world.width*cam.zoom,world.height*cam.zoom);ctx.restore();
 
  for(const f of state.foods){
    const x=sx(f.x),y=sy(f.y),r=f.r*cam.zoom;if(x<-60||y<-60||x>innerWidth+60||y>innerHeight+60)continue;
-   const event=f.type==='event',rare=event||f.type==='legendary'||f.type==='large';
-   ctx.save();ctx.beginPath();ctx.fillStyle=event?'#ffe156':f.type==='legendary'?'#ffd84d':`hsl(${f.hue} 85% 62%)`;
+   const event=f.type==='event',boostFood=f.type==='boost',rare=event||boostFood||f.type==='legendary'||f.type==='large';
+   ctx.save();ctx.beginPath();ctx.fillStyle=event?'#ffe156':boostFood?'#67e8f9':f.type==='legendary'?'#ffd84d':`hsl(${f.hue} 85% 62%)`;
    ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=(f.glow||10)*cam.zoom;ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+     /* v1.6.8 boost lightning */
+     if(boostFood){
+       ctx.save();
+       const pulse=1+Math.sin(Date.now()/160)*0.12;
+       ctx.shadowColor='#67e8f9';
+       ctx.shadowBlur=28*cam.zoom;
+       ctx.fillStyle='#ffffff';
+       ctx.font='900 '+Math.max(18,r*2.15*pulse)+'px Arial';
+       ctx.textAlign='center';
+       ctx.textBaseline='middle';
+       ctx.fillText('⚡',x,y);
+       ctx.restore();
+     }
    if(rare){
-     ctx.strokeStyle=event?'rgba(255,235,120,.95)':'rgba(255,255,255,.78)';ctx.lineWidth=Math.max(1.5,2.2*cam.zoom);
+     ctx.strokeStyle=event?'rgba(255,235,120,.95)':boostFood?'rgba(103,232,249,.98)':'rgba(255,255,255,.78)';ctx.lineWidth=Math.max(1.5,2.2*cam.zoom);
      ctx.beginPath();ctx.arc(x,y,r*(event?1.75:1.45),0,Math.PI*2);ctx.stroke();
      if(event){ctx.strokeStyle='rgba(255,225,86,.35)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,r*2.35,0,Math.PI*2);ctx.stroke()}
-     ctx.fillStyle='#fff';ctx.font=`700 ${Math.max(9,12*cam.zoom)}px system-ui`;ctx.textAlign='center';ctx.fillText(event?'★':'•',x,y+4*cam.zoom)
+     ctx.fillStyle='#fff';ctx.font=`700 ${Math.max(9,12*cam.zoom)}px system-ui`;ctx.textAlign='center';ctx.fillText(event?'★':boostFood?'⚡':'•',x,y+4*cam.zoom)
    }ctx.restore();
  }
 
  const king=state.leaderboard?.[0]?.id;
  for(const p of state.players){
    if(!p.alive)continue;
-   const x=sx(p.x),y=sy(p.y),headR=Math.max(10,(13+Math.sqrt(Math.max(0,p.mass))*.75)*cam.zoom);
+   const visualGrowth=Math.sqrt(Math.max(0,p.mass));
+     const rp=renderPos.get(p.id)||{x:p.x,y:p.y};
+     rp.x+=(p.x-rp.x)*0.34;rp.y+=(p.y-rp.y)*0.34;renderPos.set(p.id,rp);
+     const x=sx(rp.x),y=sy(rp.y),headR=Math.max(10,Math.min(68,13+visualGrowth*1.20)*cam.zoom);
    if(x<-260||y<-260||x>innerWidth+260||y>innerHeight+260)continue;
-   const tr=trails.get(p.id)||[],bodyW=Math.max(10,(15+Math.sqrt(Math.max(0,p.mass))*.62)*cam.zoom);
+   const tr=trails.get(p.id)||[],bodyW=Math.max(10,Math.min(92,15+visualGrowth*1.20)*cam.zoom);
    if(tr.length>2){
      ctx.save();ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=p.color;ctx.lineWidth=bodyW;ctx.shadowColor=p.color;ctx.shadowBlur=p.id===myId?20:9;ctx.beginPath();
      ctx.moveTo(sx(tr[0].x),sy(tr[0].y));for(let i=1;i<tr.length;i++)ctx.lineTo(sx(tr[i].x),sy(tr[i].y));ctx.stroke();ctx.shadowBlur=0;
