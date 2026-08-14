@@ -18,7 +18,8 @@ botsToggle:document.getElementById('botsToggle'),watchCoinsBtn:document.getEleme
 watchCoinsReward:document.getElementById('watchCoinsReward'),
 pauseMenu:document.getElementById('pauseMenu'),gameMenuBtn:document.getElementById('gameMenuBtn'),
 resumeBtn:document.getElementById('resumeBtn'),homeBtn:document.getElementById('homeBtn'),
-pauseSoundBtn:document.getElementById('pauseSoundBtn'),pauseLangBtn:document.getElementById('pauseLangBtn')
+pauseSoundBtn:document.getElementById('pauseSoundBtn'),pauseLangBtn:document.getElementById('pauseLangBtn'),
+rankBadge:document.getElementById('rankBadge'),missionList:document.getElementById('missionList'),eventStatus:document.getElementById('eventStatus'),eventStatusHud:document.getElementById('eventStatusHud'),missionsPanel:document.getElementById('missionsPanel')
 };
 
 // Snakivo v1.6.2 mobile control side
@@ -97,6 +98,70 @@ let coins=Math.max(0,parseInt(localStorage.getItem('snakivo_coins')||'0',10)||0)
 let myId=null,world={width:4600,height:4600},state={players:[],foods:[],leaderboard:[]},playing=false,dead=false;
 let pointer={x:innerWidth/2,y:innerHeight/2},boost=false,boostCharges=0,cam={x:2300,y:2300,zoom:1},sound=localStorage.getItem('snakivo_sound')!=='off';
 let prevScore=0,lastEatSoundAt=0,rank=0;
+let sessionStartedAt=0,sessionTopSeconds=0,missionState=null,liveEvent=null;
+const V2_MISSIONS=[
+ {id:'score',icon:'🎯',name:'Reach 1,000 Score',target:1000,reward:75},
+ {id:'kills',icon:'⚔️',name:'Get 3 Kills',target:3,reward:100},
+ {id:'boosts',icon:'⚡',name:'Use Boost 3 Times',target:3,reward:60},
+ {id:'top1',icon:'👑',name:'Reach #1',target:1,reward:120},
+ {id:'survive',icon:'⏱️',name:'Survive 2 Minutes',target:120,reward:90}
+];
+function v2Rank(score){
+ const ranks=[['Bronze',0],['Silver',500],['Gold',1500],['Platinum',3500],['Diamond',7000],['King',12000]];
+ let r=ranks[0];for(const x of ranks)if(score>=x[1])r=x;return r[0];
+}
+function v2Today(){return new Date().toISOString().slice(0,10)}
+function v2LoadMissions(){
+ const key='snakivo_v2_missions';
+ let raw=null;try{raw=JSON.parse(localStorage.getItem(key)||'null')}catch{}
+ if(!raw||raw.date!==v2Today()){
+   const shuffled=[...V2_MISSIONS].sort(()=>Math.random()-.5).slice(0,3);
+   missionState={date:v2Today(),missions:shuffled.map(m=>({...m,progress:0,claimed:false}))};
+   localStorage.setItem(key,JSON.stringify(missionState));
+ }else missionState=raw;
+}
+function v2SaveMissions(){try{localStorage.setItem('snakivo_v2_missions',JSON.stringify(missionState))}catch{}}
+function v2MissionProgress(id,progress){
+ if(!missionState)return;
+ const m=missionState.missions.find(x=>x.id===id);if(!m||m.claimed)return;
+ const next=Math.max(m.progress,Math.min(m.target,Math.floor(progress)));
+ if(next===m.progress)return;
+ m.progress=next;v2SaveMissions();v2RenderMissions();
+}
+function v2RenderMissions(){
+ if(!ui.missionList||!missionState)return;
+ ui.missionList.innerHTML=missionState.missions.map(m=>{
+   const done=m.progress>=m.target;
+   return '<div class="v2Mission '+(done?'done':'')+'"><div><b>'+m.icon+' '+escapeHtml(m.name)+'</b><small>'+m.progress+' / '+m.target+' • 🪙 '+m.reward+'</small></div><button data-mission="'+m.id+'" '+(done&&!m.claimed?'':'disabled')+'>'+ (m.claimed?'CLAIMED':done?'CLAIM':'IN PROGRESS') +'</button></div>';
+ }).join('');
+ ui.missionList.querySelectorAll('[data-mission]').forEach(b=>b.onclick=()=>{
+   const m=missionState.missions.find(x=>x.id===b.dataset.mission);
+   if(!m||m.claimed||m.progress<m.target)return;
+   m.claimed=true;coins+=m.reward;saveEconomy();v2SaveMissions();v2RenderMissions();
+   toast('🎯 Mission complete! +'+m.reward+' 🪙',2600);sfx('reward');
+ });
+}
+function v2Update(){
+ if(!playing||dead)return;
+ const me=state.players.find(p=>p.id===myId);
+ if(!me)return;
+ v2MissionProgress('score',me.score);
+ v2MissionProgress('kills',me.kills||0);
+ if(rank===1){sessionTopSeconds=Math.min(120,sessionTopSeconds+1);v2MissionProgress('top1',1)}
+ if(sessionStartedAt){const sec=Math.floor((Date.now()-sessionStartedAt)/1000);v2MissionProgress('survive',sec)}
+ if(ui.rankBadge)ui.rankBadge.textContent='🏆 '+v2Rank(me.score);
+}
+function v2UpdateEvent(e){
+ const labels=[ui.eventStatus,ui.eventStatusHud].filter(Boolean);
+ if(!labels.length)return;
+ if(e&&e.type==='golden_zone'){
+   liveEvent=e;
+   labels.forEach(el=>{el.textContent='🌟 GOLDEN ZONE ACTIVE';el.classList.add('active')});
+ }else if(e&&e.type==='end'){
+   liveEvent=null;labels.forEach(el=>{el.textContent='';el.classList.remove('active')});
+ }
+}
+v2LoadMissions();
 const PAID_RESPAWN_COST=75;
 let botsEnabled=false;
 let rewardedAdsWatched=Math.max(0,parseInt(localStorage.getItem('snakivo_rewarded_ads')||'0',10)||0);
@@ -274,7 +339,7 @@ function goHome(){
  socket.emit('leave');
  playing=false;dead=false;pauseOpen=false;boost=false;myId=null;state={players:[],foods:[],leaderboard:[]};trails.clear();
  ui.pauseMenu.classList.add('hidden');ui.death.classList.add('hidden');ui.hud.classList.add('hidden');ui.menu.classList.remove('hidden');
- renderLB([]);drawMini();
+ renderLB([]);v2DrawLiveZone();drawMini();
 }
 ui.gameMenuBtn.onclick=openPause;
 ui.resumeBtn.onclick=closePause;
@@ -292,7 +357,7 @@ ui.name.value=localStorage.getItem('snakivo_name')||'';
 ui.play.onclick=()=>{
  audio();const name=(ui.name.value||'Player').trim().slice(0,18);localStorage.setItem('snakivo_name',name);
  if(!unlocked.includes(selectedSkin))selectedSkin='emerald';
- socket.emit('join',{name,skin:selectedSkin,botsEnabled});playing=true;dead=false;prevScore=0;
+ socket.emit('join',{name,skin:selectedSkin,botsEnabled});playing=true;dead=false;prevScore=0;sessionStartedAt=Date.now();sessionTopSeconds=0;v2RenderMissions();
  ui.menu.classList.add('hidden');ui.hud.classList.remove('hidden');sfx('click')
 };
 ui.respawn.onclick=()=>respawn(false);
@@ -325,16 +390,20 @@ socket.on('gameEvent',e=>{
   }
 
    if(e.type==='boostSpawn'){banner(`⚡ ${I18N[lang].boostSpawn||'BOOST FOOD SPAWNED!'}`);sfx('rare')}
-  if(e.type==='boostEaten' && e.id===myId){toast(`🚀 ${I18N[lang].boostEaten||'BOOST CHARGE +1!'}`,2200);sfx('rare')}
+  if(e.type==='boostEaten' && e.id===myId){v2MissionProgress('boosts',(missionState?.missions.find(x=>x.id==='boosts')?.progress||0)+1);toast(`🚀 ${I18N[lang].boostEaten||'BOOST CHARGE +1!'}`,2200);sfx('rare')}
 if(e.type==='rareSpawn'){banner(`⭐ ${I18N[lang].rareSpawn}`);sfx('rare')}
  if(e.type==='rareEaten'){banner(`👑 ${e.name} ${I18N[lang].rareEaten}`);sfx('rare')}
+   if(e.type==='liveEventStart'){liveEvent=e;v2UpdateEvent(e);banner('🌟 GOLDEN ZONE IS LIVE!');sfx('rare')}
+ if(e.type==='liveEventEnd'){liveEvent=null;if(ui.eventStatus){ui.eventStatus.textContent='';ui.eventStatus.classList.remove('active')}banner('🌟 Golden Zone ended')}
+ if(e.type==='zoneReward'&&e.id===myId){toast('🌟 GOLDEN ZONE +6 SCORE',1300)}
  if(e.type==='streak'){
    const msg=`🔥 ${e.name}: ${e.streak} ${I18N[lang].killStreak} +${e.bonus||0}`;
    if(e.id===myId){toast(msg,3000);sfx('kill')} else if(e.streak>=4)banner(msg);
  }
 });
 socket.on('state',s=>{
-   state=s;
+   state=s;liveEvent=s.liveEvent||null;
+   // SNAKIVO_V2_FULL_UPGRADE state sync
    // v1.8.7b: sync BOOST charges from every server state
    updateBoostUI();const liveIds=new Set();
  for(const p of s.players){if(!renderPos.has(p.id))renderPos.set(p.id,{x:p.x,y:p.y});}
@@ -351,6 +420,7 @@ socket.on('state',s=>{
    ui.score.textContent=me.score;ui.size.textContent=Math.floor(me.mass);ui.kills.textContent=me.kills||0;ui.streak.textContent=me.streak||0;
    if(me.score>prevScore && Date.now()-lastEatSoundAt>85){sfx('eat');lastEatSoundAt=Date.now()}
    prevScore=me.score;
+   v2Update();
  }
  rank=(s.leaderboard||[]).findIndex(x=>x.id===myId)+1;
  renderLB(s.leaderboard);drawMini();
@@ -365,6 +435,17 @@ function renderLB(rows=[]){
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
+function v2DrawLiveZone(){
+  if(!liveEvent||liveEvent.type!=='golden_zone')return;
+  const z=world.width?liveEvent:null;if(!z)return;
+  const sx=innerWidth/world.width,sy=innerHeight/world.height;
+  const cx=innerWidth/2+(z.x-cam.x)*cam.zoom;
+  const cy=innerHeight/2+(z.y-cam.y)*cam.zoom;
+  const rr=z.radius*cam.zoom;
+  ctx.save();ctx.beginPath();ctx.arc(cx,cy,rr,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,209,72,.08)';ctx.fill();
+  ctx.strokeStyle='rgba(255,209,72,.72)';ctx.lineWidth=4;ctx.setLineDash([14,10]);ctx.stroke();ctx.restore();
+}
 function drawMini(){
     if(!world.width||!world.height)return;
     const w=mini.width,h=mini.height;

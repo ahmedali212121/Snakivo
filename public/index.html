@@ -103,9 +103,7 @@
       <div class="menuEconomy">
         <div class="wallet">🪙 <span data-i18n="coins">Coins</span>: <b id="coinMenu">0</b></div>
         <button id="dailyBtn" class="dailyBtn"><span>🎁</span><b data-i18n="dailyReward">Daily Reward</b><small id="dailyStatus"></small></button>
-      </div>
-
-      <div class="homeOptions">
+      </div><div class="homeOptions">
         <label class="botToggle">
           <span class="botCopy"><b>🤖 <span data-i18n="bots">Bots</span></b><small data-i18n="botsHint">Off by default</small></span>
           <input id="botsToggle" type="checkbox"/>
@@ -129,6 +127,16 @@
       <div id="skinHint" class="skinHint"></div>
 
       <button id="playBtn" class="primary" data-i18n="play">PLAY NOW</button>
+
+<section id="missionsPanel" class="v2Panel glass">
+        <div class="v2PanelHead">
+          <div><b>🎯 Daily Missions</b><small>Complete missions and earn coins</small></div>
+          <span id="rankBadge" class="v2RankBadge">🏆 Bronze</span>
+        </div>
+        <div id="missionList" class="v2MissionList"></div>
+        <div id="eventStatus" class="v2EventStatus"></div>
+      </section>
+      <!-- SNAKIVO_V2_0_1_PLAY_FIX -->
 
       <div class="features">
         <span>⚡ <b data-i18n="realtime">Realtime</b></span>

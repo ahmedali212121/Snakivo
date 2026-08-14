@@ -162,3 +162,35 @@ html[dir="rtl"] .skinSectionTitle,html[dir="rtl"] .saudiSpecialLabel{text-align:
 
 /* Snakivo v1.7.9 BOOST desktop visibility fix */
 .boostBtn{display:flex!important;align-items:center;justify-content:center;pointer-events:auto!important;touch-action:manipulation;}
+
+/* SNAKIVO_V2_FULL_UPGRADE */
+.v2Panel{margin:10px 0;padding:12px 14px;text-align:left;background:rgba(8,24,34,.82);border:1px solid rgba(255,255,255,.09);border-radius:16px}
+.v2PanelHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}
+.v2PanelHead b{font-size:14px}.v2PanelHead small{display:block;opacity:.62;margin-top:2px;font-size:10px}
+.v2RankBadge{padding:7px 10px;border-radius:999px;background:rgba(255,209,72,.12);border:1px solid rgba(255,209,72,.3);font-size:11px;white-space:nowrap}
+.v2MissionList{display:grid;gap:7px}
+.v2Mission{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 9px;border-radius:12px;background:rgba(255,255,255,.045)}
+.v2Mission.done{border-color:rgba(55,214,122,.35);box-shadow:0 0 16px rgba(55,214,122,.08)}
+.v2Mission b{font-size:11px}.v2Mission small{display:block;opacity:.62;font-size:9px;margin-top:2px}
+.v2Mission button{border:0;border-radius:9px;padding:6px 8px;font-size:9px;font-weight:800;background:#1d3542;color:#fff;cursor:pointer}
+.v2Mission button:not(:disabled){background:#36d88a;color:#062016}.v2Mission button:disabled{opacity:.48;cursor:default}
+.legendarySection{margin-top:8px;border-top:1px solid rgba(255,255,255,.06);padding-top:8px}.v2EventHud{position:fixed;top:82px;left:50%;transform:translateX(-50%);z-index:20;pointer-events:none;min-height:18px;font-size:12px;font-weight:900;color:#ffd148;text-shadow:0 0 14px rgba(255,209,72,.55)}.v2EventHud.active{animation:v2Pulse 1.2s ease-in-out infinite}.v2EventStatus{min-height:16px;margin-top:7px;text-align:center;font-size:10px;font-weight:800;color:#ffd148}
+.v2EventStatus.active{animation:v2Pulse 1.2s ease-in-out infinite}
+@keyframes v2Pulse{50%{opacity:.48;transform:scale(1.02)}}
+@media(max-width:700px){
+ .v2Panel{padding:10px;margin:8px 0}.v2Mission{padding:7px}.v2Mission b{font-size:10px}.v2Mission button{padding:6px;font-size:8px}
+}
+
+/* SNAKIVO_V2_0_1_PLAY_FIX */
+#playBtn{position:relative;z-index:6;display:flex!important;align-items:center;justify-content:center;margin-top:4px}
+#missionsPanel{order:10}
+.v2Panel{margin-top:10px}
+@media(max-height:820px) and (min-width:701px){
+  .heroPanel{max-height:calc(100vh - 86px);overflow-y:auto;scrollbar-width:thin}
+  #playBtn{position:sticky;bottom:4px}
+}
+@media(max-width:700px){
+  .heroPanel{max-height:calc(100vh - 72px);overflow-y:auto;scrollbar-width:thin}
+  #playBtn{position:sticky;bottom:4px}
+  #missionsPanel{margin-bottom:8px}
+}

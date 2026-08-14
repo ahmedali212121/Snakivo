@@ -1,3 +1,4 @@
+// SNAKIVO_V2_FULL_UPGRADE
 const express = require('express');
 const http = require('http');
 const path = require('path');
@@ -50,6 +51,28 @@ const SKINS = {
   germany:{id:'germany',color:'#1a1a1a',accent:'#ffce00'},
   japan:{id:'japan',color:'#f7f7f7',accent:'#bc002d'}
 };
+const V2_RANKS=[
+  {id:'bronze',name:'Bronze',min:0},
+  {id:'silver',name:'Silver',min:500},
+  {id:'gold',name:'Gold',min:1500},
+  {id:'platinum',name:'Platinum',min:3500},
+  {id:'diamond',name:'Diamond',min:7000},
+  {id:'king',name:'King',min:12000}
+];
+function rankForScore(score){
+  let r=V2_RANKS[0];
+  for(const x of V2_RANKS)if(score>=x.min)r=x;
+  return r;
+}
+let liveEvent=null;
+let nextLiveEventAt=Date.now()+30000;
+function spawnLiveZone(){
+  const now=Date.now();
+  const radius=520;
+  liveEvent={type:'golden_zone',x:rnd(700,WORLD.width-700),y:rnd(700,WORLD.height-700),radius,until:now+28000,startedAt:now,label:'GOLDEN ZONE'};
+  io.emit('gameEvent',{type:'liveEventStart',event:liveEvent});
+}
+
 
 function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
 function rnd(a,b){ return Math.random()*(b-a)+a; }
@@ -91,7 +114,7 @@ function makePlayer(id,data={},isBot=false){
   return {
     id,name:cleanName(data.name),x:pos.x,y:pos.y,vx:0,vy:0,angle:rnd(-Math.PI,Math.PI),targetAngle:rnd(-Math.PI,Math.PI),
     mass:10,score:0,alive:true,boost:false,skin,color:SKINS[skin].color,accent:SKINS[skin].accent,
-    lastInput:Date.now(),invulnerableUntil:Date.now()+1800,joinedAt:Date.now(),kills:0,streak:0,isBot,boostRequested:false,boostCharges:0, // v1.8.6: initialize BOOST charges
+    lastInput:Date.now(),invulnerableUntil:Date.now()+1800,joinedAt:Date.now(),kills:0,streak:0,deaths:0,foodEaten:0,isBot,boostRequested:false,boostCharges:0, // v2.0 stats
     botThinkAt:0,botRespawnAt:0
   };
 }
@@ -99,7 +122,7 @@ function publicPlayer(p){
   return {
     id:p.id,name:p.name,x:p.x,y:p.y,angle:p.angle,mass:p.mass,score:Math.floor(p.score),alive:p.alive,
     color:p.color,accent:p.accent,skin:p.skin,boost:p.boost,r:sizeFromMass(p.mass),inv:p.invulnerableUntil>Date.now(),
-    kills:p.kills,streak:p.streak,isBot:p.isBot,boostCharges:p.boostCharges||0,boostActive:!!p.boost
+    kills:p.kills,streak:p.streak,deaths:p.deaths||0,foodEaten:p.foodEaten||0,isBot:p.isBot,boostCharges:p.boostCharges||0,boostActive:!!p.boost,rank:rankForScore(p.score).id,rankName:rankForScore(p.score).name
   };
 }
 function humanCount(){ return [...players.values()].filter(p=>!p.isBot).length; }
@@ -174,6 +197,7 @@ io.emit('gameEvent',{type:'rareSpawn',x,y,id:f.id,value:RARE_EVENT_VALUE});
 function kill(victim,killer){
   if(!victim.alive)return;
   victim.alive=false;
+  victim.deaths=(victim.deaths||0)+1;
   victim.streak=0;
   const drops=Math.min(40,Math.max(10,Math.floor(victim.mass*0.82)));
   for(let i=0;i<drops;i++){
@@ -253,6 +277,8 @@ function update(dt){
     lastRareEvent=now;
     spawnRareEvent();
   }
+  if(!liveEvent && now>=nextLiveEventAt) { spawnLiveZone(); nextLiveEventAt=now+70000; }
+  if(liveEvent && now>=liveEvent.until) { io.emit('gameEvent',{type:'liveEventEnd'}); liveEvent=null; }
 
   for(const p of [...players.values()]){
     if(p.isBot)botAI(p,now);
@@ -293,6 +319,14 @@ function update(dt){
     p.x=clamp(p.x,rr,WORLD.width-rr);p.y=clamp(p.y,rr,WORLD.height-rr);
     if(boosting){p.mass=Math.max(10,p.mass-dt*1.8);p.score=Math.max(0,p.score-dt*0.45);}
 
+    if(liveEvent && now<liveEvent.until && Math.hypot(p.x-liveEvent.x,p.y-liveEvent.y)<=liveEvent.radius){
+      if(!p.eventTickAt||now>=p.eventTickAt){
+        p.eventTickAt=now+1000;
+        p.score+=6;
+        p.mass+=0.35;
+        if(!p.isBot)io.emit('gameEvent',{type:'zoneReward',id:p.id,name:p.name});
+      }
+    }
     const pr=sizeFromMass(p.mass);
     for(const [id,f] of foods){
       const dx=f.x-p.x,dy=f.y-p.y,hit=pr+f.r;
@@ -308,6 +342,7 @@ function update(dt){
           }
           p.mass+=f.value;
           p.score+=2.2*f.value;
+          p.foodEaten=(p.foodEaten||0)+1;
         if(f.type==='event'){
           p.score+=80;
           io.emit('gameEvent',{type:'rareEaten',id:p.id,name:p.name,value:f.value});
@@ -343,7 +378,7 @@ setInterval(()=>{
     const visiblePlayers=[...players.values()].filter(p=>!p.isBot || viewer.botsEnabled);
     const leaderboard=visiblePlayers.filter(p=>p.alive).sort((a,b)=>b.score-a.score).slice(0,10)
       .map((p,i)=>({rank:i+1,id:p.id,name:p.name,score:Math.floor(p.score),mass:Math.floor(p.mass),kills:p.kills,streak:p.streak,isBot:p.isBot}));
-    sock.emit('state',{t:Date.now(),players:visiblePlayers.map(publicPlayer),foods:[...foods.values()],leaderboard});
+    sock.emit('state',{t:Date.now(),players:visiblePlayers.map(publicPlayer),foods:[...foods.values()],leaderboard,liveEvent});
   }
 },1000/TICK_RATE);
 
