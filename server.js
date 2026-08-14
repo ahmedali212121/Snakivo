@@ -190,11 +190,12 @@ function kill(victim,killer){
     if(killer.streak>=2){
       io.emit('gameEvent',{type:'streak',id:killer.id,name:killer.name,streak:killer.streak,bonus:streakBonus});
     }
-  }
+      io.emit('gameEvent',{type:'kill',id:killer.id,name:killer.name,victimId:victim.id,victimName:victim.name,kills:killer.kills,streak:killer.streak,bonus:streakBonus});
+}
   if(victim.isBot){
     victim.botRespawnAt=Date.now()+rnd(1200,2600);
   }else{
-    io.to(victim.id).emit('dead',{killer:killer?.name||null,score:Math.floor(victim.score),mass:Math.floor(victim.mass)});
+    io.to(victim.id).emit('dead',{killer:killer?.name||null,killerMass:killer?Math.floor(killer.mass):null,killerKills:killer?killer.kills:0,killerStreak:killer?killer.streak:0,score:Math.floor(victim.score),mass:Math.floor(victim.mass)});
   }
 }
 function respawnBot(p){

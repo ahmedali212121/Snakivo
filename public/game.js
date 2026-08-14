@@ -310,12 +310,20 @@ function respawn(rewarded){
 
 socket.on('joined',d=>{myId=d.id;world=d.world});
 socket.on('dead',d=>{
+  if(d?.killer){ toast('Eliminated by '+d.killer+(d.killerMass!=null?' • Size '+d.killerMass:''),3200); }
+
  dead=true;playing=false;ui.hud.classList.add('hidden');ui.death.classList.remove('hidden');
  ui.finalScore.textContent=d.score;ui.finalSize.textContent=d.mass;ui.deathText.textContent=d.killer?`${I18N[lang].killedBy}: ${d.killer}`:'';
  const me=state.players.find(p=>p.id===myId);const earned=Math.max(1,Math.floor((d.score||0)/35)+(me?.kills||0)*8);
  coins+=earned;saveEconomy();ui.earnedCoins.textContent=earned;sfx('death')
 });
 socket.on('gameEvent',e=>{
+  // v1.9.0c: Kill/Death UX
+  if(e.type==='kill'){
+    if(e.id===myId){ toast('KILL! '+e.victimName+(e.streak>=2?' • '+e.streak+' KILL STREAK':''),2600); }
+    else if(e.victimId===myId){ toast('You were eliminated by '+e.name,3000); }
+  }
+
    if(e.type==='boostSpawn'){banner(`⚡ ${I18N[lang].boostSpawn||'BOOST FOOD SPAWNED!'}`);sfx('rare')}
   if(e.type==='boostEaten' && e.id===myId){toast(`🚀 ${I18N[lang].boostEaten||'BOOST CHARGE +1!'}`,2200);sfx('rare')}
 if(e.type==='rareSpawn'){banner(`⭐ ${I18N[lang].rareSpawn}`);sfx('rare')}
@@ -358,31 +366,92 @@ function renderLB(rows=[]){
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function drawMini(){
- if(!world.width||!world.height)return;
- const w=mini.width,h=mini.height;mctx.clearRect(0,0,w,h);
- mctx.fillStyle='rgba(5,16,23,.88)';mctx.fillRect(0,0,w,h);
- mctx.strokeStyle='rgba(255,255,255,.16)';mctx.lineWidth=2;mctx.strokeRect(1,1,w-2,h-2);
- const sxm=w/world.width,sym=h/world.height;
- const event=state.foods.find(f=>f.type==='event');
-   const boostMini=state.foods.find(f=>f.type==='boost');
-   if(boostMini){
-     const bx=boostMini.x*sxm,by=boostMini.y*sym;
-     mctx.save();
-     mctx.fillStyle='#67e8f9';
-     mctx.shadowColor='#67e8f9';
-     mctx.shadowBlur=12;
-     mctx.font='900 20px Arial';
-     mctx.textAlign='center';mctx.textBaseline='middle';
-     mctx.fillText('⚡',bx,by);
-     mctx.restore();
-   }
- if(event){
-   const x=event.x*sxm,y=event.y*sym;mctx.fillStyle='#ffe156';mctx.shadowColor='#ffe156';mctx.shadowBlur=12;
-   mctx.beginPath();for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,r=i%2?4:8;mctx.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r)}mctx.closePath();mctx.fill();mctx.shadowBlur=0;
- }
- const me=state.players.find(p=>p.id===myId&&p.alive);
- if(me){mctx.fillStyle='#ffffff';mctx.beginPath();mctx.arc(me.x*sxm,me.y*sym,5,0,Math.PI*2);mctx.fill();mctx.strokeStyle=me.color;mctx.lineWidth=2;mctx.stroke()}
-}
+    if(!world.width||!world.height)return;
+    const w=mini.width,h=mini.height;
+    mctx.clearRect(0,0,w,h);
+    mctx.fillStyle='rgba(5,16,23,.88)';
+    mctx.fillRect(0,0,w,h);
+    mctx.strokeStyle='rgba(255,255,255,.16)';
+    mctx.lineWidth=2;
+    mctx.strokeRect(1,1,w-2,h-2);
+
+    const sxm=w/world.width,sym=h/world.height;
+
+    // Rare Event
+    const event=state.foods.find(f=>f.type==='event');
+    if(event){
+      const x=event.x*sxm,y=event.y*sym;
+      mctx.save();
+      mctx.fillStyle='#ffe156';
+      mctx.shadowColor='#ffe156';
+      mctx.shadowBlur=12;
+      mctx.beginPath();
+      for(let i=0;i<10;i++){
+        const a=-Math.PI/2+i*Math.PI/5,r=i%2?4:8;
+        mctx.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r);
+      }
+      mctx.closePath();mctx.fill();mctx.restore();
+    }
+
+    // Boost Food
+    const boostMini=state.foods.find(f=>f.type==='boost');
+    if(boostMini){
+      const bx=boostMini.x*sxm,by=boostMini.y*sym;
+      mctx.save();
+      mctx.fillStyle='#67e8f9';
+      mctx.shadowColor='#67e8f9';
+      mctx.shadowBlur=12;
+      mctx.font='900 18px Arial';
+      mctx.textAlign='center';mctx.textBaseline='middle';
+      mctx.fillText('⚡',bx,by);
+      mctx.restore();
+    }
+
+    const alive=state.players.filter(p=>p.alive);
+    const biggest=alive.reduce((best,p)=>!best||p.mass>best.mass?p:best,null);
+
+    // Other players
+    for(const p of alive){
+      if(p.id===myId)continue;
+      const x=p.x*sxm,y=p.y*sym;
+      const isTop=biggest&&p.id===biggest.id;
+      mctx.save();
+      mctx.beginPath();
+      mctx.arc(x,y,isTop?6:3.5,0,Math.PI*2);
+      mctx.fillStyle=isTop?'#ffd84d':(p.isBot?'#a78bfa':'#4da6ff');
+      if(isTop){mctx.shadowColor='#ffd84d';mctx.shadowBlur=12;}
+      mctx.fill();
+      mctx.restore();
+    }
+
+    // You
+    const me=alive.find(p=>p.id===myId);
+    if(me){
+      const x=me.x*sxm,y=me.y*sym;
+      mctx.save();
+      mctx.fillStyle='#ffffff';
+      mctx.beginPath();mctx.arc(x,y,5,0,Math.PI*2);mctx.fill();
+      mctx.strokeStyle=me.color;mctx.lineWidth=2;mctx.stroke();
+      mctx.restore();
+    }
+
+    // #1 crown + number
+    if(biggest){
+      const x=biggest.x*sxm,y=biggest.y*sym;
+      mctx.save();
+      mctx.font='900 13px Arial';
+      mctx.textAlign='center';
+      mctx.textBaseline='bottom';
+      mctx.lineWidth=3;
+      mctx.strokeStyle='rgba(5,16,23,.95)';
+      mctx.strokeText('👑 1',x,y-8);
+      mctx.fillStyle='#ffd84d';
+      mctx.fillText('👑 1',x,y-8);
+      mctx.restore();
+    }
+  }
+// v1.9.1b: player mini-map
+
 
 // v1.8.4: robust window-level Space BOOST
 window.addEventListener('keydown',e=>{
