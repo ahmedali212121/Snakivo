@@ -78,3 +78,44 @@ html[dir="rtl"] .skinSectionTitle,html[dir="rtl"] .saudiSpecialLabel{text-align:
 @media(max-width:760px){.gameMenuBtn{left:50%;transform:translateX(-50%);bottom:12px;min-height:38px;font-size:11px;padding:0 11px}html[dir="rtl"] .gameMenuBtn{left:50%;right:auto}}
 
 .contentBody{overflow:auto;background:radial-gradient(circle at 50% 0,#102733 0,#061019 55%);min-height:100vh}.contentPage{background:rgba(8,22,31,.78);border:1px solid rgba(255,255,255,.08);border-radius:22px;margin:90px auto 40px;box-shadow:0 18px 55px rgba(0,0,0,.25)}.contentPage h1{font-size:38px;line-height:1.1}.contentPage h2{font-size:22px;margin-top:28px}.contentPage p{color:#c3d2da}.contentPage a{color:#71efaa}.contactNotice{padding:14px 16px;border-radius:13px;border:1px solid rgba(255,216,100,.22);background:rgba(255,216,100,.08);color:#ffe38f}.backLinks{margin-top:30px}
+
+
+/* Snakivo v1.6.1 — mobile home-screen accessibility fix */
+@media (max-width:760px){
+  #menu.overlay{
+    display:block;
+    overflow-y:auto;
+    overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+    padding:78px 12px max(28px, env(safe-area-inset-bottom));
+  }
+  #menu .heroPanel{
+    width:min(94vw,500px);
+    margin:0 auto;
+    padding:20px 16px 24px;
+  }
+  #menu .snakeLogo{font-size:46px}
+  #menu .heroPanel h1{font-size:44px;letter-spacing:-2px}
+  #menu .tagline{font-size:15px;margin-bottom:12px}
+  #menu .skins{max-height:230px}
+  #menu #playBtn{
+    position:sticky;
+    bottom:max(8px, env(safe-area-inset-bottom));
+    z-index:5;
+    box-shadow:0 12px 32px rgba(0,0,0,.38),0 10px 28px rgba(54,220,129,.25);
+  }
+  #menu .homeSeoLinks{padding-bottom:8px}
+}
+
+/* Keep touch controls clear of phone safe areas while playing */
+@media (max-width:760px){
+  .joystick{
+    left:max(18px, env(safe-area-inset-left));
+    bottom:max(24px, calc(env(safe-area-inset-bottom) + 18px));
+  }
+  .boostBtn{
+    right:max(18px, env(safe-area-inset-right));
+    bottom:max(24px, calc(env(safe-area-inset-bottom) + 18px));
+  }
+}
