@@ -97,6 +97,9 @@ let coins=Math.max(0,parseInt(localStorage.getItem('snakivo_coins')||'0',10)||0)
 
 let myId=null,world={width:4600,height:4600},state={players:[],foods:[],leaderboard:[]},playing=false,dead=false;
 let pointer={x:innerWidth/2,y:innerHeight/2},boost=false,boostCharges=0,cam={x:2300,y:2300,zoom:1},sound=localStorage.getItem('snakivo_sound')!=='off';
+const FPS_KEY='snakivo_fps';
+let targetFps=localStorage.getItem(FPS_KEY)==='30'?30:60;
+let lastFrameAt=0;
 let prevScore=0,lastEatSoundAt=0,rank=0;
 let sessionStartedAt=0,sessionTopSeconds=0,missionState=null,liveEvent=null;
 const V2_MISSIONS=[
@@ -347,6 +350,48 @@ ui.homeBtn.onclick=goHome;
 ui.pauseSoundBtn.onclick=()=>{ui.sound.click();ui.pauseSoundBtn.firstChild.textContent=sound?'🔊 ':'🔇 '};
 ui.pauseLangBtn.onclick=()=>ui.lang.click();
 
+// Frame-rate setting: 60 FPS by default, with a 30 FPS battery/performance option.
+function applyFps(value){
+ targetFps=value===30?30:60;
+ try{localStorage.setItem(FPS_KEY,String(targetFps))}catch{}
+ document.querySelectorAll('[data-fps]').forEach(btn=>{
+   const active=Number(btn.dataset.fps)===targetFps;
+   btn.classList.toggle('active',active);
+   btn.setAttribute('aria-pressed',active?'true':'false');
+   btn.textContent=(active?'✓ ':'')+btn.dataset.fps+' FPS';
+   btn.style.fontWeight=active?'800':'600';
+   btn.style.border=active?'2px solid currentColor':'1px solid rgba(255,255,255,.25)';
+   btn.style.boxShadow=active?'0 0 0 3px rgba(255,255,255,.12)':'none';
+   btn.style.opacity=active?'1':'.72';
+   btn.style.transform=active?'scale(1.03)':'scale(1)';
+ });
+}
+function installFpsSetting(){
+ if(!ui.pauseMenu||ui.pauseMenu.querySelector('[data-fps-setting]'))return;
+ const row=document.createElement('div');
+ row.dataset.fpsSetting='1';
+ row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0;flex-wrap:wrap';
+ const label=document.createElement('span');
+ label.textContent=lang==='ar'?'عدد الإطارات':'Frame Rate';
+ label.dataset.fpsLabel='1';
+ const controls=document.createElement('div');
+ controls.style.cssText='display:flex;gap:8px';
+ [30,60].forEach(fps=>{
+   const b=document.createElement('button');
+   b.type='button';b.dataset.fps=String(fps);b.textContent=fps+' FPS';
+   b.style.cssText='padding:8px 12px;border-radius:10px;cursor:pointer';
+   b.onclick=()=>{applyFps(fps);sfx('click')};controls.appendChild(b);
+ });
+ row.append(label,controls);
+ const anchor=ui.pauseLangBtn?.parentElement;
+ if(anchor&&anchor.parentElement)anchor.parentElement.insertBefore(row,anchor.nextSibling);else ui.pauseMenu.appendChild(row);
+ applyFps(targetFps);
+}
+installFpsSetting();
+const _applyLang=applyLang;
+applyLang=function(){_applyLang();const label=document.querySelector('[data-fps-label]');if(label)label.textContent=lang==='ar'?'عدد الإطارات':'Frame Rate'};
+
+
 function resize(){
  const dpr=Math.min(devicePixelRatio||1,2);canvas.width=innerWidth*dpr;canvas.height=innerHeight*dpr;
  canvas.style.width=innerWidth+'px';canvas.style.height=innerHeight+'px';ctx.setTransform(dpr,0,0,dpr,0,0)
@@ -402,12 +447,21 @@ if(e.type==='rareSpawn'){banner(`⭐ ${I18N[lang].rareSpawn}`);sfx('rare')}
  }
 });
 socket.on('state',s=>{
-   state=s;liveEvent=s.liveEvent||null;
+   // Movement snapshots may omit slower-changing data (foods/leaderboard).
+   // Merge them into the previous state so the renderer never sees missing arrays.
+   state={
+     ...state,
+     ...s,
+     players:Array.isArray(s.players)?s.players:(state.players||[]),
+     foods:Array.isArray(s.foods)?s.foods:(state.foods||[]),
+     leaderboard:Array.isArray(s.leaderboard)?s.leaderboard:(state.leaderboard||[])
+   };
+   liveEvent=state.liveEvent||null;
    // SNAKIVO_V2_FULL_UPGRADE state sync
    // v1.8.7b: sync BOOST charges from every server state
    updateBoostUI();const liveIds=new Set();
- for(const p of s.players){if(!renderPos.has(p.id))renderPos.set(p.id,{x:p.x,y:p.y});}
- for(const p of s.players){
+ for(const p of state.players){if(!renderPos.has(p.id))renderPos.set(p.id,{x:p.x,y:p.y});}
+ for(const p of state.players){
    liveIds.add(p.id);if(!p.alive)continue;
    let tr=trails.get(p.id);if(!tr){tr=[];trails.set(p.id,tr)}
    const last=tr[tr.length-1];if(!last||Math.hypot(last.x-p.x,last.y-p.y)>4)tr.push({x:p.x,y:p.y});
@@ -415,15 +469,15 @@ socket.on('state',s=>{
  }
  for(const id of trails.keys())if(!liveIds.has(id))trails.delete(id);
  for(const id of renderPos.keys())if(!liveIds.has(id))renderPos.delete(id);
- const me=s.players.find(p=>p.id===myId);
+ const me=state.players.find(p=>p.id===myId);
  if(me){
    ui.score.textContent=me.score;ui.size.textContent=Math.floor(me.mass);ui.kills.textContent=me.kills||0;ui.streak.textContent=me.streak||0;
    if(me.score>prevScore && Date.now()-lastEatSoundAt>85){sfx('eat');lastEatSoundAt=Date.now()}
    prevScore=me.score;
    v2Update();
  }
- rank=(s.leaderboard||[]).findIndex(x=>x.id===myId)+1;
- renderLB(s.leaderboard);drawMini();
+ rank=(state.leaderboard||[]).findIndex(x=>x.id===myId)+1;
+ renderLB(state.leaderboard);drawMini();
 });
 function renderLB(rows=[]){
  const meRank=rows.findIndex(r=>r.id===myId)+1;
@@ -698,8 +752,12 @@ function drawCountryHeadMark(p,headR){
  cols.forEach((c,i)=>{ctx.fillStyle=c;ctx.fillRect(-w/2,-h/2+i*stripeH,w,stripeH+1)});
  ctx.restore();
 }
-function frame(){
- requestAnimationFrame(frame);ctx.clearRect(0,0,innerWidth,innerHeight);
+function frame(now=performance.now()){
+ requestAnimationFrame(frame);
+ const frameInterval=1000/targetFps;
+ if(now-lastFrameAt<frameInterval-0.5)return;
+ lastFrameAt=now-((now-lastFrameAt)%frameInterval);
+ ctx.clearRect(0,0,innerWidth,innerHeight);
  const g=ctx.createRadialGradient(innerWidth*.5,innerHeight*.45,50,innerWidth*.5,innerHeight*.5,Math.max(innerWidth,innerHeight));
  g.addColorStop(0,'#102733');g.addColorStop(1,'#061019');ctx.fillStyle=g;ctx.fillRect(0,0,innerWidth,innerHeight);drawGrid();
  const me=state.players.find(p=>p.id===myId);
@@ -742,7 +800,7 @@ function frame(){
    if(!p.alive)continue;
    const visualGrowth=Math.sqrt(Math.max(0,p.mass));
      const rp=renderPos.get(p.id)||{x:p.x,y:p.y};
-     rp.x+=(p.x-rp.x)*0.34;rp.y+=(p.y-rp.y)*0.34;renderPos.set(p.id,rp);
+     rp.x+=(p.x-rp.x)*0.35;rp.y+=(p.y-rp.y)*0.35;renderPos.set(p.id,rp);
      const x=sx(rp.x),y=sy(rp.y),headR=Math.max(10,Math.min(68,13+visualGrowth*1.20)*cam.zoom);
    if(x<-260||y<-260||x>innerWidth+260||y>innerHeight+260)continue;
    const tr=trails.get(p.id)||[],bodyW=Math.max(10,Math.min(92,15+visualGrowth*1.20)*cam.zoom);

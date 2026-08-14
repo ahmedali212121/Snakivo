@@ -11,6 +11,9 @@ const io = new Server(server, { transports: ['websocket', 'polling'] });
 const PORT = process.env.PORT || 3000;
 const WORLD = { width: 4600, height: 4600 };
 const TICK_RATE = 30;
+const STATE_RATE = 20; // network snapshots per second; physics stays at 30 Hz
+const FOOD_STATE_RATE = 5; // food is mostly static, so send it less often
+const LEADERBOARD_RATE = 5;
 const FOOD_TARGET = 480;
 const BASE_SPEED = 250;
 const BOOST_SPEED = 500;
@@ -370,17 +373,56 @@ function update(dt){
   if(foods.size<FOOD_TARGET)spawnFood(Math.min(40,FOOD_TARGET-foods.size));
 }
 
+// Keep gameplay/physics at 30 Hz, but decouple network snapshots from physics.
+// Sending the entire world 30 times/sec was the main source of bandwidth/CPU spikes.
 setInterval(()=>{
   update(1/TICK_RATE);
+},1000/TICK_RATE);
+
+let statePacketNo=0;
+let cachedFoods=[];
+let cachedLeaderboardAll=[];
+let cachedLeaderboardHumans=[];
+
+function buildLeaderboard(list){
+  return list.filter(p=>p.alive).sort((a,b)=>b.score-a.score).slice(0,10)
+    .map((p,i)=>({rank:i+1,id:p.id,name:p.name,score:Math.floor(p.score),mass:Math.floor(p.mass),kills:p.kills,streak:p.streak,isBot:p.isBot}));
+}
+
+setInterval(()=>{
+  statePacketNo+=1;
+  const now=Date.now();
+  const allRaw=[...players.values()];
+  const humanRaw=allRaw.filter(p=>!p.isBot);
+  const allPlayers=allRaw.map(publicPlayer);
+  const humanPlayers=humanRaw.map(publicPlayer);
+
+  const foodEvery=Math.max(1,Math.round(STATE_RATE/FOOD_STATE_RATE));
+  const leaderboardEvery=Math.max(1,Math.round(STATE_RATE/LEADERBOARD_RATE));
+  const includeFoods=statePacketNo===1 || statePacketNo%foodEvery===0;
+  const includeLeaderboard=statePacketNo===1 || statePacketNo%leaderboardEvery===0;
+
+  if(includeFoods)cachedFoods=[...foods.values()];
+  if(includeLeaderboard){
+    cachedLeaderboardAll=buildLeaderboard([...allRaw]);
+    cachedLeaderboardHumans=buildLeaderboard([...humanRaw]);
+  }
+
   for(const [sid,sock] of io.sockets.sockets){
     const viewer=players.get(sid);
     if(!viewer)continue;
-    const visiblePlayers=[...players.values()].filter(p=>!p.isBot || viewer.botsEnabled);
-    const leaderboard=visiblePlayers.filter(p=>p.alive).sort((a,b)=>b.score-a.score).slice(0,10)
-      .map((p,i)=>({rank:i+1,id:p.id,name:p.name,score:Math.floor(p.score),mass:Math.floor(p.mass),kills:p.kills,streak:p.streak,isBot:p.isBot}));
-    sock.emit('state',{t:Date.now(),players:visiblePlayers.map(publicPlayer),foods:[...foods.values()],leaderboard,liveEvent});
+    const withBots=!!viewer.botsEnabled;
+    const packet={
+      t:now,
+      players:withBots?allPlayers:humanPlayers,
+      liveEvent
+    };
+    // Food and leaderboard don't need to ride on every movement snapshot.
+    if(includeFoods)packet.foods=cachedFoods;
+    if(includeLeaderboard)packet.leaderboard=withBots?cachedLeaderboardAll:cachedLeaderboardHumans;
+    sock.emit('state',packet);
   }
-},1000/TICK_RATE);
+},1000/STATE_RATE);
 
 function siteBase(req){
   if(process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/+$/,'');
